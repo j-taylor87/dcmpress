@@ -11,7 +11,11 @@ from io import BytesIO
 import zipfile
 import streamlit as st
 
-from config import APP_NAME, OUTPUT_ZIP_FILENAME
+from config import (
+    APP_NAME, 
+    APP_ICON_PATH, 
+    OUTPUT_ZIP_FILENAME
+)
 from dicom_processing import process_uploaded_file
 from logging_config import LOGGER
 from ui_components import (
@@ -22,7 +26,11 @@ from ui_components import (
 )
 
 
-st.set_page_config(page_title=APP_NAME, layout="wide")
+st.set_page_config(
+    page_title=APP_NAME, 
+    layout="wide", 
+    page_icon=str(APP_ICON_PATH)
+)
 
 display_app_header()
 
