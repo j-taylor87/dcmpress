@@ -1,6 +1,10 @@
-streamlit==1.51.0
-pydicom==3.0.1
-numpy==2.3.4
-pandas==2.3.3
+streamlit==1.56.0
+pydicom==3.0.2
+numpy==2.4.4
+
 pylibjpeg==2.1.0
-pylibjpeg-libjpeg==2.3.0
+pylibjpeg-libjpeg==2.4.0
+pylibjpeg-openjpeg==2.5.0
+pylibjpeg-rle==2.2.0
+pyjpegls==1.5.1
+python-gdcm==3.2.2

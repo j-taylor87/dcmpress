@@ -1,88 +1,108 @@
 # app.py
 # dcmpress — DICOM decompressor
 # -----------------------------------------------
-# Drag & drop one or more DICOM files to view basic info
-# and decompress them to Explicit VR Little Endian.
+# Author: James Taylor
+# Created: May 2025
+# Last updated: 25 Apr 2026
+#
+# Streamlit entry point for the dcmpress DICOM decompressor app.
 
-import streamlit as st
-from pydicom import dcmread
-from pydicom.pixels.utils import decompress
 from io import BytesIO
 import zipfile
-import base64
+import streamlit as st
 
-def get_base64_image(image_path):
-    with open(image_path, "rb") as img_file:
-        return base64.b64encode(img_file.read()).decode()
-
-st.set_page_config(page_title="dcmpress", layout="wide")
-
-# app title and icon
-image_base64 = get_base64_image("slinky.png")
-st.markdown(
-    f"""
-    <div style="display: flex; align-items: center; gap: 10px;">
-        <img src="data:image/png;base64,{image_base64}" width="50" height="50" style="margin: 0;">
-        <h1 style="margin: 0; font-size: 3rem;">dcmpress</h1>
-    </div>
-    """,
-    unsafe_allow_html=True
+from config import APP_NAME, OUTPUT_ZIP_FILENAME
+from dicom_processing import process_uploaded_file
+from logging_config import LOGGER
+from ui_components import (
+    display_app_header,
+    display_dicom_preview,
+    display_dicom_summary,
+    display_sidebar_controls,
 )
-# st.title("dcmpress")
-st.markdown("<h3 style='font-size:1.2rem;'>Decompress compressed DICOM files</h3>", unsafe_allow_html=True)
 
-col1, col2 = st.columns([0.2, 0.8])
 
-with col1:
-    uploaded_files = st.file_uploader(
-        "Upload one or more compressed DICOM files", type=None, accept_multiple_files=True
-    )
+st.set_page_config(page_title=APP_NAME, layout="wide")
 
-# create in-memory ZIP buffer
+display_app_header()
+
+left_col, right_col = st.columns([0.25, 0.75])
+
+with left_col:
+    sidebar_controls = display_sidebar_controls()
+    download_placeholder = st.empty()
+
 zip_buffer = BytesIO()
+used_zip_filenames: set[str] = set()
+successful_file_count = 0
 
-with col2:
-    if uploaded_files:
-        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zipf:
-            for uploaded_file in uploaded_files:
-                ds = None
-                with st.container():
-                    st.divider()
-                    col2a, col2b = st.columns([0.9, 0.1])
-                    with col2a:
-                        try:
-                            ds = dcmread(uploaded_file, force=True)
-                            st.write(f"**File:** {uploaded_file.name}")
-                            st.write(f"**Patient Name:** {getattr(ds, 'PatientName', 'N/A')}")
-                            st.write(f"**Original Transfer Syntax:** {ds.file_meta.TransferSyntaxUID.name}")
-                            ds_decompressed = decompress(
-                                ds, decoding_plugin="pylibjpeg", generate_instance_uid=False
-                            )
-                            st.success("✅ Decompression successful")
-                            st.write(f"**New Transfer Syntax:** {ds.file_meta.TransferSyntaxUID.name}")
+with right_col:
+    if sidebar_controls.uploaded_files:
+        LOGGER.info(
+            "Starting batch processing for %s uploaded file(s).",
+            len(sidebar_controls.uploaded_files),
+        )
 
-                            # save to bytes and add to ZIP
-                            bytes_io = BytesIO()
-                            ds_decompressed.save_as(bytes_io)
-                            bytes_io.seek(0)
-                            zipf.writestr(uploaded_file.name, bytes_io.read())
+        progress_bar = st.progress(0)
 
-                        except Exception as e:
-                            st.error(f"Error processing {uploaded_file.name}: {e}")
+        with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+            for file_index, uploaded_file in enumerate(sidebar_controls.uploaded_files, start=1):
+                st.divider()
 
-                    with col2b:
-                        if ds is not None:
-                            try:
-                                st.image(ds.pixel_array, caption="Preview", clamp=True, use_container_width=True)
-                            except Exception:
-                                st.warning("No image data available.")
+                file_info_col, preview_col = st.columns([0.7, 0.3])
 
-with col1:
-    # after loop, prepare download
-    zip_buffer.seek(0)
-    st.download_button(
-        label="🡻 Download all decompressed files (.zip)",
-        data=zip_buffer,
-        file_name="decompressed_dicoms.zip",
-        mime="application/zip"
-    )
+                with st.spinner(f"Processing {uploaded_file.name}"):
+                    processing_result = process_uploaded_file(
+                        uploaded_file=uploaded_file,
+                        zip_file=zip_file,
+                        used_zip_filenames=used_zip_filenames,
+                        force_read=sidebar_controls.force_read,
+                        preserve_instance_uid=sidebar_controls.preserve_instance_uid,
+                        decoding_plugin=sidebar_controls.decoding_plugin,
+                        file_index=file_index,
+                    )
+
+                with file_info_col:
+                    if processing_result.success and processing_result.dataset is not None:
+                        st.success(processing_result.user_message)
+
+                        display_dicom_summary(
+                            processing_result=processing_result,
+                            uploaded_filename=uploaded_file.name,
+                            show_patient_identifiers=sidebar_controls.show_patient_identifiers,
+                        )
+
+                        successful_file_count += 1
+
+                    else:
+                        st.write(f"**File:** {uploaded_file.name}")
+                        st.error(processing_result.user_message)
+
+                with preview_col:
+                    if processing_result.dataset is not None:
+                        display_dicom_preview(processing_result.dataset)
+
+                progress_bar.progress(file_index / len(sidebar_controls.uploaded_files))
+
+        LOGGER.info(
+            "Batch processing complete. %s of %s file(s) added to ZIP.",
+            successful_file_count,
+            len(sidebar_controls.uploaded_files),
+        )
+
+        st.caption(
+            f"{successful_file_count} of {len(sidebar_controls.uploaded_files)} file(s) added to the output ZIP."
+        )
+
+zip_buffer.seek(0)
+
+if sidebar_controls.uploaded_files:
+    with download_placeholder:
+        st.download_button(
+            label="Download decompressed files (.zip)",
+            data=zip_buffer.getvalue(),
+            file_name=OUTPUT_ZIP_FILENAME,
+            mime="application/zip",
+            disabled=successful_file_count == 0,
+            width="stretch",
+        )
