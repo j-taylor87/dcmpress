@@ -5,16 +5,23 @@
 # Created: May 2025
 # Last updated: 25 Apr 2026
 
+"""Core DICOM read, decompress, and ZIP-packaging logic for dcmpress."""
+
 from io import BytesIO
 from pathlib import Path
+from typing import TYPE_CHECKING
 import zipfile
 
 from pydicom import dcmread
 from pydicom.dataset import Dataset
 from pydicom.errors import InvalidDicomError
+from pydicom.uid import UID
 
 from logging_config import LOGGER
 from models import ProcessingResult
+
+if TYPE_CHECKING:
+    from streamlit.runtime.uploaded_file_manager import UploadedFile
 
 
 def get_unique_zip_filename(uploaded_filename: str, used_zip_filenames: set[str]) -> str:
@@ -49,7 +56,7 @@ def get_unique_zip_filename(uploaded_filename: str, used_zip_filenames: set[str]
     return zip_filename
 
 
-def get_transfer_syntax_uid(dataset: Dataset):
+def get_transfer_syntax_uid(dataset: Dataset) -> UID:
     """Return the dataset transfer syntax UID.
 
     Parameters
@@ -79,7 +86,7 @@ def get_transfer_syntax_uid(dataset: Dataset):
 def decompress_dataset_if_required(
     dataset: Dataset,
     preserve_instance_uid: bool,
-    decoding_plugin: str,
+    decoding_plugin: str | None,
 ) -> bool:
     """Decompress a DICOM dataset in place if its transfer syntax is compressed.
 
@@ -90,9 +97,9 @@ def decompress_dataset_if_required(
     preserve_instance_uid : bool
         If True, prevents pydicom from generating a new SOP Instance UID during
         decompression.
-    decoding_plugin : str
-        pydicom decoding plugin name. Use an empty string to allow automatic
-        plugin selection.
+    decoding_plugin : str | None
+        pydicom decoding plugin name. Use None (or an empty string) to allow
+        automatic plugin selection.
 
     Returns
     -------
@@ -167,19 +174,19 @@ def write_dataset_to_bytes(dataset: Dataset) -> bytes:
 
 
 def process_uploaded_file(
-    uploaded_file,
+    uploaded_file: "UploadedFile",
     zip_file: zipfile.ZipFile,
     used_zip_filenames: set[str],
     force_read: bool,
     preserve_instance_uid: bool,
-    decoding_plugin: str,
+    decoding_plugin: str | None,
     file_index: int,
 ) -> ProcessingResult:
     """Read, optionally decompress, and add one uploaded DICOM file to the ZIP.
 
     Parameters
     ----------
-    uploaded_file
+    uploaded_file : UploadedFile
         Streamlit uploaded file object.
     zip_file : zipfile.ZipFile
         Open ZIP archive to which the processed DICOM file will be added.
@@ -189,8 +196,8 @@ def process_uploaded_file(
         Whether to pass force=True to pydicom.dcmread().
     preserve_instance_uid : bool
         Whether to preserve the original SOP Instance UID where possible.
-    decoding_plugin : str
-        pydicom decoding plugin name.
+    decoding_plugin : str | None
+        pydicom decoding plugin name, or None for automatic plugin selection.
     file_index : int
         One-based index of the file in the current upload batch, used for logging.
 
@@ -309,7 +316,8 @@ def process_uploaded_file(
             user_message=str(value_error),
         )
 
-    except Exception:
+    # Catch-all so one bad file cannot abort the whole batch; the error is logged.
+    except Exception:  # noqa: BLE001
         LOGGER.exception("Unexpected processing error for file index %s.", file_index)
 
         return ProcessingResult(
