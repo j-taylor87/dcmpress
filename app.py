@@ -7,6 +7,8 @@
 #
 # Streamlit entry point for the dcmpress DICOM decompressor app.
 
+"""Streamlit entry point that wires together upload, processing, and download."""
+
 from io import BytesIO
 import zipfile
 import streamlit as st

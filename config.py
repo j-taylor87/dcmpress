@@ -5,10 +5,12 @@
 # Created: May 2025
 # Last updated: 25 Apr 2026
 
+"""Application-wide constants and decoding plugin options for dcmpress."""
+
 from pathlib import Path
 
 APP_NAME = "dcmpress"
-APP_ICON_PATH = Path("assets/slinky_coloured.png")
+APP_ICON_PATH = Path(__file__).parent / "assets" / "slinky_coloured.png"
 
 OUTPUT_ZIP_FILENAME = "decompressed_dicom_files.zip"
 

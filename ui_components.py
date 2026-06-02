@@ -5,6 +5,8 @@
 # Created: May 2025
 # Last updated: 25 Apr 2026
 
+"""Streamlit UI components and image preview helpers for dcmpress."""
+
 import base64
 from pathlib import Path
 import numpy as np
@@ -113,7 +115,7 @@ def display_sidebar_controls() -> SidebarControls:
         format_func=get_decoding_plugin_display_name,
         index=0,
         help=(
-            "'Auto' lets pydicom try available compatible decoders."
+            "'Auto' lets pydicom try available compatible decoders. "
             "Select a specific plugin if you want to force one decoder."
         ),
     )

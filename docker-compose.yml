@@ -1,0 +1,7 @@
+services:
+  dcmpress:
+    build: .
+    container_name: dcmpress
+    restart: unless-stopped
+    ports:
+      - "8502:8501"
